@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
-import dj_database_url
+import urllib.parse
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -94,12 +94,19 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-if os.environ.get('DATABASE_URL'):
+_db_url = os.environ.get('DATABASE_URL')
+if _db_url:
+    _parsed = urllib.parse.urlparse(_db_url)
     DATABASES = {
-        'default': dj_database_url.config(
-            default=os.environ.get('DATABASE_URL'),
-            conn_max_age=600,
-        )
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _parsed.path.lstrip('/'),
+            'USER': _parsed.username,
+            'PASSWORD': _parsed.password,
+            'HOST': _parsed.hostname,
+            'PORT': str(_parsed.port or 5432),
+            'CONN_MAX_AGE': 600,
+        }
     }
 else:
     DATABASES = {
@@ -108,7 +115,7 @@ else:
             'NAME': os.environ.get('DB_NAME', 'badminton_db'),
             'USER': os.environ.get('DB_USER', 'postgres'),
             'PASSWORD': os.environ.get('DB_PASS', ''),
-            'HOST': os.environ.get('DB_HOST', 'localhost'), 
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
         }
     }
