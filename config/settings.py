@@ -98,21 +98,26 @@ import urllib.parse
 
 _db_url = os.environ.get('DATABASE_URL')
 
-if not _db_url:
-    raise Exception(f"CRITICAL: DATABASE_URL is not set! Available keys: {', '.join(os.environ.keys())}")
-
-_parsed = urllib.parse.urlparse(_db_url)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': _parsed.path.lstrip('/'),
-        'USER': _parsed.username,
-        'PASSWORD': _parsed.password,
-        'HOST': _parsed.hostname,
-        'PORT': str(_parsed.port or 5432),
-        'CONN_MAX_AGE': 600,
+if _db_url:
+    _parsed = urllib.parse.urlparse(_db_url)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _parsed.path.lstrip('/'),
+            'USER': _parsed.username,
+            'PASSWORD': _parsed.password,
+            'HOST': _parsed.hostname,
+            'PORT': str(_parsed.port or 5432),
+            'CONN_MAX_AGE': 600,
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 
