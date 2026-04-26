@@ -10,17 +10,15 @@ from .routers import search, websocket, booking
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     print("FastAPI: Starting up...")
     await db.connect()
     yield
-    # Shutdown
     print("FastAPI: Shutting down...")
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan)
 
-# Cấu hình CORS (Để Frontend gọi được API)
+# Cấu hình CORS 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

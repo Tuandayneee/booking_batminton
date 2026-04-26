@@ -27,9 +27,11 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-key-change-m
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
 _allowed = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-ALLOWED_HOSTS = _allowed + ['.vercel.app'] 
+ALLOWED_HOSTS = _allowed + ['.vercel.app', '*'] 
 
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000,https://booking-batminton.vercel.app').split(',')
+CSRF_TRUSTED_ORIGINS.append('https://*.loca.lt')
+CSRF_TRUSTED_ORIGINS.append('https://*.trycloudflare.com')
 
 
 # Application definition

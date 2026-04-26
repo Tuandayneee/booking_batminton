@@ -3,7 +3,6 @@ from partner.models import BadmintonCenter
 from django.db.models import Min
 
 def home(request):
-    # Chặn partner và staff truy cập trang home
     if request.user.is_authenticated:
         if request.user.role == 'partner':
             return redirect('partner_dashboard')
@@ -18,3 +17,21 @@ def home(request):
 
 def partner_info(request):
     return render(request, 'home/partner_info.html')
+
+def about_page(request):
+    return render(request, 'home/about.html')
+
+def terms_page(request):
+    return render(request, 'home/terms.html')
+
+def privacy_page(request):
+    return render(request, 'home/privacy.html')
+
+def booking_guide(request):
+    return render(request, 'home/booking_guide.html')
+
+def contact_partner(request):
+    return render(request, 'home/contact_partner.html')
+
+def faq(request):
+    return render(request, 'home/faq.html')

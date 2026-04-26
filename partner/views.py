@@ -1,6 +1,7 @@
-from django.shortcuts import render,get_object_or_404
+from django.shortcuts import render,get_object_or_404, redirect
 from users.decorators import role_required
-from django.shortcuts import redirect
+import csv
+from django.http import HttpResponse
 from datetime import timedelta
 from partner.utils import redirect_back
 from .forms import BadmintonCenterForm, CourtForm, StaffForm, CustomerForm
@@ -430,6 +431,97 @@ def revenue_center_detail(request, center_id):
 
 
 @role_required('partner')
+def export_revenue_csv(request):
+    """Xuất tổng quan doanh thu tất cả cơ sở"""
+    centers = BadmintonCenter.objects.filter(partner=request.user.partner_profile)
+    today = timezone.now().date()
+    start_of_month = today.replace(day=1)
+    
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = 'attachment; filename="bao_cao_tong_doanh_thu.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Tên Cơ Sở', 'Địa chỉ', 'Số đơn chờ duyệt', 'Doanh thu tháng (VND)'])
+    
+    for center in centers:
+        group_codes = Booking.objects.filter(
+            court__center=center
+        ).values_list('group_code', flat=True).distinct()
+
+        revenue_data = Transaction.objects.filter(
+            booking_group_code__in=group_codes,
+            is_verified=True,
+            verified_at__date__gte=start_of_month
+        ).aggregate(total_rev=Sum('amount'))
+        month_revenue = revenue_data['total_rev'] or 0
+        
+        pending_count = Transaction.objects.filter(
+            booking_group_code__in=group_codes,
+            is_verified=False
+        ).count()
+        
+        writer.writerow([
+            center.name,
+            center.address,
+            pending_count,
+            int(month_revenue)
+        ])
+        
+    return response
+
+@role_required('partner')
+def export_revenue_detail_csv(request, center_id):
+    """Xuất chi tiết doanh thu giao dịch của 1 cơ sở"""
+    center = get_object_or_404(BadmintonCenter, pk=center_id, partner=request.user.partner_profile)
+    group_codes = set()
+    booking_codes = Booking.objects.filter(
+        court__center=center
+    ).values_list('booking_code', flat=True)
+    
+    for code in booking_codes:
+        parts = code.rsplit('-', 1)
+        if len(parts) > 1:
+            group_codes.add(parts[0])
+            
+    today = timezone.now().date()
+    period = request.GET.get('period', 'month')
+
+    if period == 'day':
+        start_date = today
+    elif period == 'week':
+        start_date = today - timedelta(days=7)
+    elif period == 'month':
+        start_date = today - timedelta(days=30)
+    else:
+        start_date = today - timedelta(days=30)
+
+    transactions = Transaction.objects.filter(
+        booking_group_code__in=group_codes,
+        is_verified=True,
+        verified_at__date__gte=start_date
+    ).select_related('user', 'verified_by').order_by('-verified_at')
+    
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    filename = f"bao_cao_chi_tiet_doanh_thu.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Mã GD (Hệ thống)', 'Nội dung Đặt sân', 'Khách hàng', 'Số tiền (VND)', 'Thời gian duyệt', 'Người duyệt'])
+    
+    for trans in transactions:
+        writer.writerow([
+            f"#{trans.id}",
+            trans.booking_group_code,
+            trans.user.full_name or trans.user.username,
+            int(trans.amount) if trans.amount else 0,
+            trans.verified_at.strftime('%H:%M %d/%m/%Y') if trans.verified_at else '',
+            trans.verified_by.username if trans.verified_by else ''
+        ])
+        
+    return response
+
+
+@role_required('partner')
 def schedule_management(request,center_id):
     center = get_object_or_404(BadmintonCenter, pk=center_id)
     courts = Court.objects.filter(center=center, is_active=True)
@@ -601,6 +693,28 @@ def partner_add_center(request):
             
     return redirect('centers_management')
 
+@role_required('partner')
+def export_centers_csv(request):
+    """Xuất danh sách cơ sở ra file Excel"""
+    centers = BadmintonCenter.objects.filter(partner=request.user.partner_profile)
+    
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = 'attachment; filename="danh_sach_co_so.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Tên cơ sở', 'Địa chỉ', 'Giờ mở cửa', 'Giờ đóng cửa', 'Số lượng sân', 'Trạng thái'])
+    for center in centers:
+        writer.writerow([
+            center.name,
+            center.address,
+            center.open_time.strftime('%H:%M') if center.open_time else '',
+            center.close_time.strftime('%H:%M') if center.close_time else '',
+            center.courts.count(),
+            'Hoạt động' if center.is_active else 'Tạm dừng'
+        ])
+        
+    return response
+
 
 @role_required('partner')
 def partner_edit_center(request,center_id):
@@ -701,7 +815,7 @@ def transactions_management(request):
         if len(parts) > 1:
             group_codes.add(parts[0])
     
-    # Lấy transactions có group_code thuộc partner
+    
     transactions = Transaction.objects.filter(
         booking_group_code__in=group_codes
     ).select_related('user', 'verified_by').order_by('-timestamp')
@@ -718,6 +832,52 @@ def transactions_management(request):
         'filter_status': filter_status,
     }
     return render(request, 'partner/transactions.html', context)
+
+
+@role_required('partner')
+def export_transactions_csv(request):
+    """Xuất danh sách giao dịch ra file Excel"""
+    centers = BadmintonCenter.objects.filter(partner=request.user.partner_profile)
+    
+    booking_codes = Booking.objects.filter(
+        court__center__in=centers
+    ).values_list('booking_code', flat=True)
+    
+    group_codes = set()
+    for code in booking_codes:
+        parts = code.rsplit('-', 1)
+        if len(parts) > 1:
+            group_codes.add(parts[0])
+            
+    transactions = Transaction.objects.filter(
+        booking_group_code__in=group_codes
+    ).select_related('user', 'verified_by').order_by('-timestamp')
+    
+    filter_status = request.GET.get('status', 'all')
+    if filter_status == 'pending':
+        transactions = transactions.filter(is_verified=False)
+    elif filter_status == 'verified':
+        transactions = transactions.filter(is_verified=True)
+        
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = 'attachment; filename="danh_sach_giao_dich.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Mã đơn hàng', 'Khách hàng', 'Số điện thoại', 'Số tiền (VND)', 'Mã giao dịch', 'Thời gian', 'Trạng thái', 'Người duyệt'])
+    
+    for trans in transactions:
+        writer.writerow([
+            trans.booking_group_code,
+            trans.user.full_name or trans.user.username,
+            trans.user.phone_number or '',
+            int(trans.amount) if trans.amount else 0,
+            trans.transaction_reference,
+            trans.timestamp.strftime('%H:%M %d/%m/%Y') if trans.timestamp else '',
+            'Đã duyệt' if trans.is_verified else 'Chờ duyệt',
+            trans.verified_by.username if trans.is_verified and trans.verified_by else ''
+        ])
+        
+    return response
 
 
 @role_required('partner')
